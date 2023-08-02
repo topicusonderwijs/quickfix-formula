@@ -1,6 +1,6 @@
 # quickfix-formula
-This repository contains state files that are run manually.  
-The state files can be run on every node with salt master **edu-foreman.topicusonderwijs.local** or **intern-foreman.edu.codes**.
+This repository contains state files that are temporarily needed.  
+The state files can be run on any node with the salt master **edu-foreman.topicusonderwijs.local** or the master **intern-foreman.edu.codes**.
 
 Getting started:
 1. Create a directory with your name.
