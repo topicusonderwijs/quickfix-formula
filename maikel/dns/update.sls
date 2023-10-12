@@ -1,10 +1,10 @@
 update-primair-dns:
   cmd.run:
-    - name: 'sed -i "s/192.168.3.220/172.25.240.11/g;s/192.168.3.221/172.25.240.12/g;s/192.168.3.222/172.25.240.13/g" /etc/resolv.conf /etc/sysconfig/network-scripts/ifcfg-*'
+    - name: 'sed -i "s/192.168.22.142/10.64.1.51/g;s/192.168.22.143/10.64.1.52/g;s/192.168.22.146/10.64.1.53/g" /etc/resolv.conf /etc/sysconfig/network-scripts/ifcfg-*'
 
 update-kubernetees-dns:
   cmd.run:
-    - name: 'sed -i "s/192.168.3.220/172.25.240.11/g;s/192.168.3.221/172.25.240.11/g;s/192.168.3.222/172.25.240.12/g" /etc/resolv-kubernetes/resolv.conf'
+    - name: 'sed -i "s/192.168.22.142/10.64.1.51/g;s/192.168.22.143/10.64.1.52/g;s/192.168.22.146/10.64.1.53/g" /etc/resolv-kubernetes/resolv.conf'
     - onlyif:
       - fun: file.file_exists
         path: /etc/resolv-kubernetes/resolv.conf
