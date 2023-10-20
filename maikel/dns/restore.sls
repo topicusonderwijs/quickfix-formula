@@ -10,7 +10,7 @@ update-kubernetees-dns:
           path: /etc/resolv-kubernetes/resolv.conf
 
 
-update-kubernetees-dns:
+update-rke2-dns:
   cmd.run:
     - name: 'sed -i "s/10.64.1.51/192.168.22.142/g;s/10.64.1.52/192.168.22.143/g;s/10.64.1.53/192.168.22.146/g" /etc/rancher/rke2/resolv.conf'
     - onlyif:
