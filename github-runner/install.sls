@@ -1,4 +1,6 @@
 
+{% from "prometheus/map.jinja" import githubrunner with context -%}
+
 {% set version="2.311.0" %}
 {% set hash="29fc8cf2dab4c195bb147384e7e2c94cfd4d4022c793b346a6175435265aa278" %}
 
@@ -22,10 +24,9 @@ github-runner:
 
 config-actions-runner:
   cmd.run:
-    - name: "./config.sh --url $GHR_URL --token $GHR_TOKEN"
+    - name: "./config.sh --url {{ githubrunner['actions-runner'].url }} --token $GHR_TOKEN"
     - runas: github-runner
     - cwd: /opt/github-runner/actions-runner
     - env:
-        GHR_URL: "{{ salt['pillar.get']('githubrunner.actions-runner.url','None') }}"
-        GHR_TOKEN:   "{{ salt['pillar.get']('githubrunner.actions-runner.token','None') }}"
+        GHR_TOKEN: "{{ githubrunner['actions-runner'].token }}"
 
