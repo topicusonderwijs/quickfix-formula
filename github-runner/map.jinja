@@ -7,7 +7,7 @@
 # - omgeving specifiek (aka user config)gaat in pillar
 
 # 1. Lees de default waarden uit defaults.yaml. Zet dit in de namespace: default_settings
-{% import_yaml'githubrunner/defaults.yaml' as default_settings %}
+{% import_yaml'github-runner/defaults.yaml' as default_settings %}
 
 # 2. Zet waarden in de namespace "os_family_map" op basis van OS.
 {% set os_family_map = salt['grains.filter_by']({
