@@ -24,7 +24,7 @@ github-runner:
 
 config-actions-runner:
   cmd.run:
-    - name: "./config.sh --url {{ githubrunner['actions-runner'].url }} --token {{ githubrunner['actions-runner'].token }}"
+    - name: "./config.sh --url \"${GHR_URL}\" --token \"${GHR_TOKEN}\" --unattended --replace"
     - runas: github-runner
     - cwd: /opt/github-runner/actions-runner
     - env:
