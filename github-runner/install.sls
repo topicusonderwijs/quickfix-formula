@@ -40,7 +40,7 @@ setup-service-actions-runner:
     - cwd: /opt/github-runner/actions-runner
 
 start-service-actions-runner:
-  ser.run:
+  cmd.run:
     - name: "./svc.sh start"
     - runas: github-runner
     - cwd: /opt/github-runner/actions-runner
