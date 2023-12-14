@@ -1,5 +1,5 @@
 
-{% from "prometheus/map.jinja" import githubrunner with context -%}
+{% from "github-runner/map.jinja" import githubrunner with context -%}
 
 {% set version="2.311.0" %}
 {% set hash="29fc8cf2dab4c195bb147384e7e2c94cfd4d4022c793b346a6175435265aa278" %}
