@@ -20,8 +20,13 @@ github-runner:
     - group: github-runner
 
 
-#config-actions-runner:
-#  cmd.run:
-#    - name: "./config.sh --url {{ salt['pillar.get']('githubrunner.actions-runner.url','None') }} --token {{ salt['pillar.get']('githubrunner.actions-runner.token','None') }}"
-
+config-actions-runner:
+  cmd.run:
+    - name: "./config.sh --url $GHR_URL --token $GHR_TOKEN"
+    - user: github-runner
+    - group: github-runner
+    - cwd: /opt/github-runner/actions-runner
+    - env:
+        GHR_URL: "{{ salt['pillar.get']('githubrunner.actions-runner.url','None') }}"
+        GHR_TOKEN:   "{{ salt['pillar.get']('githubrunner.actions-runner.token','None') }}"
 
