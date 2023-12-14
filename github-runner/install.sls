@@ -33,9 +33,14 @@ config-actions-runner:
         GHR_TOKEN: "{{ githubrunner['actions-runner'].token }}"
     - unless: cat /opt/github-runner/actions-runner/svc.sh
 
-service-actions-runner:
+setup-service-actions-runner:
   cmd.run:
     - name: "./svc.sh install github-runner"
     - runas: root
     - cwd: /opt/github-runner/actions-runner
 
+start-service-actions-runner:
+  ser.run:
+    - name: "./svc.sh start"
+    - runas: github-runner
+    - cwd: /opt/github-runner/actions-runner
