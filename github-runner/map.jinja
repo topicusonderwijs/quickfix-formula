@@ -1,0 +1,33 @@
+# -*- coding: utf-8 -*-
+# vim: ft=jinja
+
+# howto:
+# - default waardengaan in defaults.yaml
+# - OS specifiekgaan hieronder in de OS family map
+# - omgeving specifiek (aka user config)gaat in pillar
+
+# 1. Lees de default waarden uit defaults.yaml. Zet dit in de namespace: default_settings
+{% import_yaml'githubrunner/defaults.yaml' as default_settings %}
+
+# 2. Zet waarden in de namespace "os_family_map" op basis van OS.
+{% set os_family_map = salt['grains.filter_by']({
+        'Debian': {},
+        'Suse': {},
+        'Arch': {},
+        'RedHat': {},
+  }
+  ,grain="os_family"
+  , merge=salt['pillar.get']('githubrunner:lookup'))
+%}
+
+#3. Update de namespace "default_settings" met de namespace "os_family_map"
+{% do default_settings.githubrunner.update(os_family_map) %}
+
+#4. update de namespace default_settings.githubrunner met de data
+#   uit pillar dat uit de pillar namespace"githubrunner komt"
+{% set githubrunner = salt['pillar.get'](
+       'githubrunner',
+        default=default_settings.githubrunner,
+        merge=True
+    )
+%}
