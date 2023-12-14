@@ -20,6 +20,7 @@ github-runner:
     - source_hash: {{ hash }}
     - user: github-runner
     - group: github-runner
+    - unless: cat /opt/github-runner/actions-runner/svc.sh
 
 
 config-actions-runner:
@@ -31,4 +32,10 @@ config-actions-runner:
         GHR_URL: "{{ githubrunner['actions-runner'].url }}"
         GHR_TOKEN: "{{ githubrunner['actions-runner'].token }}"
     - unless: cat /opt/github-runner/actions-runner/svc.sh
+
+config-actions-runner:
+  cmd.run:
+    - name: "./svc.sh install github-runner"
+    - runas: root
+    - cwd: /opt/github-runner/actions-runner
 
