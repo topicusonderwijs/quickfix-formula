@@ -30,4 +30,5 @@ config-actions-runner:
     - env:
         GHR_URL: "{{ githubrunner['actions-runner'].url }}"
         GHR_TOKEN: "{{ githubrunner['actions-runner'].token }}"
+    - unless: [[ -f "/opt/github-runner/actions-runner/svc.sh" ]]
 
