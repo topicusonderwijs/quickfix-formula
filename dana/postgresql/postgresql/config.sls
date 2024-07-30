@@ -169,7 +169,7 @@ pgpass file:
 
 {{ instance_name }}_postgresql-extra-config:
   file.managed:
-    - name: {{ pg_data_dir }}/postgresql.conf.saltstack
+    - name: {{ pg_data_dir }}/postgresql.conf.extra
     - source: salt://postgresql/files/postgresql.conf.saltstack.tmpl
     - user: postgres
     - group: postgres
