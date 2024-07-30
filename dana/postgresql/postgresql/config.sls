@@ -180,7 +180,7 @@ pgpass file:
     - require:
       - file: {{ instance_name }}_postgresql-main-config
 
-{{ instance_name }}_postgresql-config:
+{{ instance_name }}_postgresql:
   file.managed:
     - name: {{ pg_data_dir }}/postgresql.conf.saltstack
     - source: salt://postgresql/files/postgresql.conf.saltstack.tmpl
