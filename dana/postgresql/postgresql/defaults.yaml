@@ -45,7 +45,9 @@ postgresql:
 
   scripts: {}
 
-  settings: {}
+  settings: 
+    log_filename: postgresql-%Y-%m-%d.log
+    
   pgbackrest:
     async:
       enabled: False
