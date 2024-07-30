@@ -3,4 +3,5 @@
 {%- for setting, value in data.items() %}
 {{ "%s = \'%s\'" | format(setting, value) }}
 {%- endfor %}
+log_filename = 'postgresql-%Y-%m-%d.log'
 ### EOF ###
