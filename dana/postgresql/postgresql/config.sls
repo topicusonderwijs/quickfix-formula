@@ -168,11 +168,15 @@ pgpass file:
       - cmd: {{ instance_name }}_postgresql-initdb
 
 {{ instance_name }}_postgresql-extra-config:
-  file.append:
-    - name: {{ pg_data_dir }}/postgresql.conf.extra
-    - text: |
-        # global settings 
-        {{ postgresql.settings.items() }}
+  file.managed:
+    - name: {{ pg_data_dir }}/postgresql.conf.saltstack
+    - source: salt://postgresql/files/postgresql.conf.saltstack.tmpl
+    - user: postgres
+    - group: postgres
+    - template: jinja
+    - context:
+        data: {{ instance.settings | default({}) | yaml }}
+    - mode: 600
     - require:
       - file: {{ instance_name }}_postgresql-main-config
 
