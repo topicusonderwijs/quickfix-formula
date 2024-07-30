@@ -1,0 +1,150 @@
+# -*- coding: utf-8 -*-
+# vim: ft=yaml sw=2 ts=2 expandtab
+
+postgresql:
+  root_dir: /var/lib/pgsql
+  repositories:
+    - name: pgdg-common
+      humanname: PostgreSQL common RPMs for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/common/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    - name: pgdg12
+      humanname: PostgreSQL 12 for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/12/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    - name: pgdg13
+      humanname: PostgreSQL 13 for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/13/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    - name: pgdg14
+      humanname: PostgreSQL 14 for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/14/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    - name: pgdg15
+      humanname: PostgreSQL 15 for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/15/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    {%- if grains.osmajorrelease > 7  %}
+    # PostgreSQL 16 requires >= el8
+    - name: pgdg16
+      humanname: PostgreSQL 16 for RHEL/CentOS $releasever - $basearch
+      baseurl: https://download.postgresql.org/pub/repos/yum/16/redhat/rhel-$releasever-$basearch
+      enabled: 1
+      gpgcheck: 1
+    {%- endif %}
+
+  initdb_params:
+    encoding: UTF8
+    auth-host: password
+    auth-local: peer
+
+  scripts: {}
+
+  settings: {}
+  pgbackrest:
+    async:
+      enabled: False
+      archive-push-proc-max: 8
+      archive-get-proc-max: 8
+      spool-path: /var/spool/pgbackrest
+      archive-get-queue-max: 1GiB
+      archive-missing-retry: True
+    global:
+      log-level-console: info
+      compress-type: gz
+      compress-level: 6
+    repositories:
+      - path: /var/lib/pgbackrest
+
+  {%- if grains.osmajorrelease == 7 %}
+  gpgkey: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+    Version: GnuPG v2.0.22 (GNU/Linux)
+
+    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
+    =fPP0
+    -----END PGP PUBLIC KEY BLOCK-----
+  {%- else %}
+  gpgkey: |
+    -----BEGIN PGP PUBLIC KEY BLOCK-----
+
+    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
+    =Elfg
+    -----END PGP PUBLIC KEY BLOCK-----
+  {%- endif %}

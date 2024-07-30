@@ -1,0 +1,7 @@
+### This file is managed by SaltStack
+### changes will be overwritten.
+{%- for setting, value in data.items() %}
+{{ "%s = \'%s\'" | format(setting, value) }}
+{%- endfor %}
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+### EOF ###

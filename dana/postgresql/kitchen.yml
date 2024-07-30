@@ -1,0 +1,18 @@
+# Suites define the tests that we run.
+suites:
+  - name: postgresql
+    provisioner:
+      salt_copy_filter:
+        - .git
+        - .kitchen
+      state_top:
+        base:
+          '*':
+            - postgresql
+      pillars:
+        top.sls:
+          base:
+            '*':
+              - postgresql
+      pillars_from_files:
+        postgresql.sls: pillar.example

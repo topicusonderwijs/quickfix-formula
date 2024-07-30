@@ -1,0 +1,270 @@
+#!/bin/bash
+
+# Set bash options.
+# e: exit on error
+# u: exit on unbound variable
+# o pipefail: set exit code from pipe line to rightmost not zero exit code,
+#             needed for "-e" to work in code pipelines.
+set -euo pipefail
+
+function print_help() {
+
+  echo "Required parameters: "
+  echo "    -i|--instance <instance name>"
+  echo "        Postgresql instance to migrate"
+  echo "    -o|--old <version>"
+  echo "        Postgresql version where to migrate from"
+  echo "    -n|--new <version>"
+  echo "        Postgresql version where to migrate to"
+  echo "    -y|--yes"
+  echo "        Yes to all questions asked"
+  end_trap
+  exit 1
+}
+
+function ask(){
+  while true; do
+    echo -n "${1} [Y/N] "
+    if [ $PARAM_YES_TO_ALL -eq 1 ]; then
+      echo "--yes-to-all--"
+      reply="Y"
+    else
+      slack "Q" "Script is asking: ${1} [Y/N]"
+      read -r reply
+    fi
+
+    case "$reply" in
+      Y*|y*) return 0 ;;
+      N*|n*) return 1 ;;
+    esac
+  done
+}
+
+function noPostProcesses(){
+  echot "Migrate done, but new cluster not started"
+  echot "You need to run the post-migrate steps your self"
+  slack "OK" "Migrate done, but new cluster not started. Post-migrate steps still needed"
+  end_trap
+  exit 0
+}
+
+
+# Load tools and starts EXIT trap for slack and cleanup.
+. /var/lib/pgsql/scripts/base_functions.sh
+end_trap
+. /var/lib/pgsql/scripts/.secrets
+
+if [ "$(whoami)" != "postgres" ]; then
+  echo "Need to run this script as postgres, not as $(whoami)"
+  exit 1
+fi
+
+LOCALE=C
+
+PG_INSTANCE_OLD=""
+PG_INSTANCE_NEW=""
+PG_VERSION_OLD=""
+PG_VERSION_NEW=""
+PGDATAOLD=""
+PGDATANEW=""
+PARAM_YES_TO_ALL=0
+
+while [[ "$#" -gt 0 ]]; do
+  case $1 in
+    -o|--old) PGDATAOLD="$2"; shift ;;
+    -n|--new) PGDATANEW="$2"; shift ;;
+    -y|--yes) PARAM_YES_TO_ALL=1;;
+    *) echo "Unknown parameter passed: $1"; print_help ;;
+  esac
+  shift
+done
+
+if [[ -z "${PGDATANEW}" || -z "${PGDATAOLD}" ]]; then
+  print_help
+fi
+
+###
+# Get version and instance from data path
+PGDATANEW=$(realpath ${PGDATANEW})
+PGDATAOLD=$(realpath ${PGDATAOLD})
+
+if [[ ! -d "${PGDATANEW}" ]]; then
+  echot "${PGDATANEW} is not a directory, exiting"
+  exit 21
+fi
+if [[ ! -d "${PGDATAOLD}" ]]; then
+  echot "${PGDATAOLD} is not a directory, exiting"
+  exit 22
+fi
+
+if [[ "${PGDATAOLD}" =~ -*/([0-9]+)/(.[^/]*)(/|) ]]; then
+  PG_VERSION_OLD=${BASH_REMATCH[1]}
+  PG_INSTANCE_OLD=${BASH_REMATCH[2]}
+else
+  echot "Could not get version and instance from ${PGDATAOLD}"
+  exit 31
+fi
+
+if [[ "${PGDATANEW}" =~ -*/([0-9]+)/(.[^/]*)(/|) ]]; then
+  PG_VERSION_NEW=${BASH_REMATCH[1]}
+  PG_INSTANCE_NEW=${BASH_REMATCH[2]}
+else
+  echot "Could not get version and instance from ${PGDATAOLD}"
+  exit 32
+fi
+
+PG_SERVICE_NEW="postgresql-${PG_VERSION_NEW}@${PG_INSTANCE_NEW}.service"
+PG_SERVICE_OLD="postgresql-${PG_VERSION_OLD}@${PG_INSTANCE_OLD}.service"
+
+PG_DATA_DIR=$PGDATANEW
+setPGPortFromConfig
+PGPORTNEW=$PG_PORT
+
+PG_DATA_DIR=$PGDATAOLD
+setPGPortFromConfig
+PGPORTOLD=$PG_PORT
+
+CUR_LOCALE=$(cat ${PGDATAOLD}/postgresql.conf | grep lc_time | cut -d "'" -f 2)
+if [ "${CUR_LOCALE}" != "" ]; then
+LOCALE=$CUR_LOCALE
+fi
+
+
+clear
+NUM_CPUS=$(getconf _NPROCESSORS_ONLN) # Determine amount of cpu's
+if [ $NUM_CPUS -lt 3 ]; then
+  NUM_CPUS=3
+fi
+
+export PGDATAOLD
+export PGDATANEW
+export PGPORTOLD
+export PGPORTNEW
+export PGBINOLD="/usr/pgsql-${PG_VERSION_OLD}/bin"
+export PGBINNEW="/usr/pgsql-${PG_VERSION_NEW}/bin"
+export NUM_JOBS=$((NUM_CPUS-2)) # leave 2 cpu's free
+export PGUSER="postgres"
+export PG_UPGRADE_OPTIONS="--link -j ${NUM_JOBS}"
+
+
+### Current settings
+echot "From the parameters we determined the following"
+echo "PG_INSTANCE_OLD: $PG_INSTANCE_OLD"
+echo "PG_VERSION_OLD: $PG_VERSION_OLD"
+echo "PG_SERVICE_OLD: $PG_SERVICE_OLD"
+echo ""
+echo "PG_INSTANCE_NEW: $PG_INSTANCE_NEW"
+echo "PG_VERSION_NEW: $PG_VERSION_NEW"
+echo "PG_SERVICE_NEW: $PG_SERVICE_NEW"
+echo ""
+echot "These are the current environment variables used for the upgrade:"
+echo "PGBINOLD: $PGBINOLD"
+echo "PGBINNEW: $PGBINNEW"
+echo "PGDATAOLD: $PGDATAOLD"
+echo "PGDATANEW: $PGDATANEW"
+echo "PGPORTOLD: $PGPORTOLD"
+echo "PGPORTNEW: $PGPORTNEW"
+echo "LOCALE: $LOCALE"
+
+echo "NUM_JOBS: $NUM_JOBS"
+echo "PGUSER: $PGUSER"
+echo ""
+echo "The executed pg_upgrade command will be:"
+echo "----------------------------------------"
+echo "${PGBINNEW}/pg_upgrade ${PG_UPGRADE_OPTIONS}"
+echo ""
+
+if ! ask "Are these settings correct?"; then
+  echot "Settings not confirmed, please try again"
+  end_trap
+  exit 1
+fi
+
+slack "OK" "Starting with upgrade of instance ${PG_VERSION_OLD}/${PG_INSTANCE_OLD} to ${PG_VERSION_NEW}/${PG_INSTANCE_NEW} "
+
+echot "Shutting down ${PG_SERVICE_OLD}"
+sudo /bin/systemctl stop ${PG_SERVICE_OLD}
+
+echot "Shutting down ${PG_SERVICE_NEW}"
+sudo /bin/systemctl stop ${PG_SERVICE_NEW}
+
+
+### initdb
+if ask "Initialize a new db at the destination?"; then
+
+  if [ -d "${PGDATANEW}" ]; then
+    echot "New database directory exists, clearing..."
+    rm -rf "${PGDATANEW}"/*
+  fi
+  echot "Initializing new database..."
+  ${PGBINNEW}/initdb  --locale=$LOCALE -D "${PGDATANEW}" -E "UTF-8"
+
+  SALT_REQUIRED=1
+else
+  SALT_REQUIRED=0
+fi
+
+
+### Check:
+if ask "Do you want to run a pre-flight check?"; then
+  echot "Upgrade check..."
+  ${PGBINNEW}/pg_upgrade --check ${PG_UPGRADE_OPTIONS}
+else
+  echot "pre-flight check mandatory for upgrade..."
+  exit 1
+fi
+
+### Do it!
+if ask "DO YOU WANT TO UPGRADE THE DATABASE NOW"; then
+  echot "Running: ${PGBINNEW}/pg_upgrade ${PG_UPGRADE_OPTIONS}"
+  time ${PGBINNEW}/pg_upgrade ${PG_UPGRADE_OPTIONS}
+else
+  echot "Upgrade canceled by user... "
+  exit 1
+fi
+
+if [ $SALT_REQUIRED -eq 1 ]; then
+  echot "WARNING: You need to run 'salt-call state.sls postgresql' as root to be able to continue"
+  if ask "Have you run 'salt-call state.sls postgresql' as root?"; then
+    if [ ! -f "${PGDATANEW}/postgresql.conf.saltstack" ]; then
+      echot "${PGDATANEW}/postgresql.conf.saltstack not found, needed to continue"
+      noPostProcesses
+    fi
+  else
+    noPostProcesses
+  fi
+fi
+
+if ask "Do you wish to start the new cluster?"; then
+
+  echot "Starting ${PG_SERVICE_NEW}"
+  sudo systemctl start ${PG_SERVICE_NEW}
+  echot "Analyzing new cluster"
+  #./analyze_new_cluster.sh
+  vacuumdb --all --analyze-only -p $PGPORTNEW -j ${NUM_JOBS}
+
+
+  if ask "Do you wish to delete the old cluster?"; then
+    echot "Deleting old cluster"
+    ./delete_old_cluster.sh
+  fi
+
+  if ask "Do you wish to reindex?"; then
+    echot "Reindex all databases"
+    ${PGBINNEW}/reindexdb -a -p $PGPORTNEW -j ${NUM_JOBS}
+    echot "Reindex system catalogs"
+    ${PGBINNEW}/reindexdb -s -p $PGPORTNEW
+  fi
+
+else
+
+  noPostProcesses
+
+fi
+
+
+
+# End error trap
+end_trap
+slack "OK" "Finished with upgrading instance ${PG_INSTANCE_OLD} to ${PG_INSTANCE_NEW} "
+exit 0

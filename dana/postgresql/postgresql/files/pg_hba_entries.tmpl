@@ -1,0 +1,18 @@
+{%- if override|default(false) %}
+### This file is managed by SaltStack
+### changes will be overwritten.
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+# "local" is for Unix domain socket connections only
+local   all             postgres                                peer
+
+{%- else %}
+#### Do not edit between markers, changes will be overwritten!
+{%- endif %}
+
+{%- for entry in data %}
+{%- if entry.address is not defined %}
+{%- do entry.update({'address':''}) %}
+{%- endif %}
+{{ "%-7s %-15s %-15s %-23s %s" |format( entry['type'], entry['database'], entry['user'], entry['address'], entry['method']) }}
+{%- endfor %}

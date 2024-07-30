@@ -1,0 +1,97 @@
+{%- set global = data.pgbackrest.global %}
+{%- set async  = data.pgbackrest.async %}
+##############################################################
+# This file is managed by Salt.
+# Manual changes WILL be overwritten. 
+#
+
+##############################################################
+# Global Settings
+
+[global]
+{%- for k, v in global.items() %}
+{{ k }}={{ v }}
+{%- endfor %}
+
+{%- if not 'process-max' in global %}
+process-max={{ ( grains.num_cpus / 2 ) | default(1) | int }}
+{%- endif %}
+
+{%- if async.enabled %}
+archive-async=y
+spool-path={{async['spool-path']}}
+archive-get-queue-max={{async['archive-get-queue-max']}}
+{%-   if async['archive-push-queue-max'] is defined %}
+archive-push-queue-max={{async['archive-push-queue-max']}}
+{%-   endif %}
+{%-   if async['archive-missing-retry'] %}
+archive-missing-retry=y
+{%-   else %}
+archive-missing-retry=n
+{%-   endif %}
+{%- endif %}
+
+{# Configure every repo #}
+##############################################################
+# Repositories:
+
+{%- for repo in data.pgbackrest.repositories %}
+
+#::: repo{{loop.index}} :::
+  {%- set index = loop.index  -%}
+
+  {# If "retention-full" is not set, add default #}
+  {%- if not 'retention-full' in repo -%}
+    {%- do repo.update({'retention-full': 1}) -%}
+  {%- endif -%}
+
+  {%- if repo.type == 'gcs' %}
+    {%- do repo.update(
+      {
+        'gcs-key':  "/etc/pgbackrest/gcs-key-repo-"+(loop.index|string)+".json",
+        'gcs-bucket': (repo["gcs-bucket"]|replace("gs://", ""))
+      }
+    ) %}
+  {%- endif %}
+
+  {# 
+   # If s3, you really want to bundle the repo, See:
+   # https://pgbackrest.org/configuration.html#section-repository/option-repo-bundle
+  #}
+  {%- if (not 'bundle' in repo) and (( repo.type | default('posix') == 's3') or ( repo.type | default('posix') == 'gcs')) -%}
+    {%- do repo.update({'bundle':'y'}) -%}
+  {%- endif -%} 
+
+  {%- for k,v in repo.items() %}
+repo{{ index }}-{{ k }}={{ v }}
+  {%- endfor -%}
+{%- endfor %}
+
+##############################################################
+# PostgreSQL Instances (aka pgbackrest "stanza's"):
+{%- for instance, values in data.instance.items() %}
+{%- if not values.pgbackrest | default(False) %}
+{%- do values.update({'pgbackrest': {}}) %}
+{%- endif %}
+{%- if (values.pgbackrest.enabled | default(True)) %}
+{%- set stanzaName = values.pgbackrest.stanza | default(instance) %}
+
+[{{stanzaName}}]
+pg1-path=/var/lib/pgsql/{{ values.version }}/{{ instance }}
+{%- if values.settings.port | default(False) %}
+pg1-port={{values.settings.port}}
+{%- endif %}
+{%- endif %}
+{%- endfor %}
+
+{% if async.enabled %}
+##############################################################
+# Async process max configuration.
+[global:archive-get]
+process-max={{async['archive-get-proc-max']}}
+
+[global:archive-push]
+process-max={{async['archive-push-proc-max']}}
+{%- endif %}
+
+### EOF ###

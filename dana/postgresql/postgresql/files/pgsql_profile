@@ -1,0 +1,33 @@
+# User specific aliases and functions
+
+alias vi='vim'
+alias gg='git log --graph --full-history --all --color \
+        --pretty=format:"%x1b[31m%h%x09%x1b[32m%d%x1b[0m%x20%s"'
+alias l='ls -1' 
+
+# History verify
+shopt -s histverify
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+        . /etc/bashrc
+fi
+
+# Source profile
+if [ -f ~/.profile ]; then
+        . ~/.profile
+fi
+
+
+# Set prompt red if we are root and show full path
+if [[ ${EUID} == 0 ]] ; then
+        PS1='[\t] \[\033[01;31m\]\h\[\033[00m\] \w \$ '
+else
+        PS1='[\t] \[\033[01;32m\]\u@\h\[\033[00m\] \w \$\[\033[00m\] '
+fi
+
+# Include user specifics if it exists
+if [[ -f ~/.bashrc.local ]]; then
+        source ~/.bashrc.local
+fi
+

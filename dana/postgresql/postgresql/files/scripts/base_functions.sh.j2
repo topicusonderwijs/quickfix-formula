@@ -1,0 +1,312 @@
+#!/bin/bash
+### This file is managed by Saltstack
+### Changes WILL be overwritten
+
+function echot {
+  DATEX=$(date "+%H:%M:%S")
+  LAST_ECHO=$@
+  echo "[${DATEX}] " $@
+}
+
+function prepareAndSanityCheck {
+
+    echot "Performing Sanity Check"
+
+    if [ -z "${PG_VERSION-}" ]; then
+      echot "ERROR: Required variable PG_VERSION is not set"
+      exit 1
+    fi
+    if [ -z "${PG_INSTANCE-}" ]; then
+      echot "ERROR: Required variable PG_INSTANCE is not set"
+      exit 1
+    fi
+
+    if [ -z "${PGBR_STANZA-}" ]; then
+      echot "ERROR: Required variable PGBR_STANZA is not set"
+      exit 1
+    fi
+
+    # Set default values if not set
+
+    if [ -z "${PG_SERVICE-}" ]; then
+      PG_SERVICE="postgresql-${PG_VERSION}"
+      echot "PG_SERVICE not set, set to ${PG_SERVICE}"
+    fi
+    if [ -z "${PG_SQL_DIR-}" ]; then
+      PG_SQL_DIR="/var/lib/pgsql/sql"
+      echot "PG_SQL_DIR not set, set to ${PG_SQL_DIR}"
+    fi
+    if [ -z "${PG_BIN_DIR-}" ]; then
+      PG_BIN_DIR="/usr/pgsql-${PG_VERSION}/bin"
+      echot "PG_BIN_DIR not set, set to ${PG_BIN_DIR}"
+    fi
+    if [ -z "${PG_DATA_DIR-}" ]; then
+      PG_DATA_DIR="/var/lib/pgsql/${PG_VERSION}/${PG_INSTANCE}"
+      echot "PG_DATA_DIR not set, set to ${PG_DATA_DIR}"
+    fi
+    if [ -z "${PG_CFG_FILE-}" ]; then
+      PG_CFG_FILE="postgresql.conf.saltstack"
+      echot "PG_CFG_FILE not set, set to ${PG_CFG_FILE}"
+    fi
+    if [ -z "${TMP_DIR-}" ]; then
+      TMP_DIR=$(mktemp -d -t pg-config-backup-$(date +%Y-%m-%d-%H-%M-%S)-XXXXXXXXXX)
+      echot "TMP_DIR not set, set to ${TMP_DIR}"
+    fi
+    if [ -z "${RESTORE_SUCCESSFUL-}" ]; then
+      RESTORE_SUCCESSFUL=0
+      echot "RESTORE_SUCCESSFUL not set, set to ${RESTORE_SUCCESSFUL}"
+    fi
+    if [ -z "${LOGFILE-}" ]; then
+      LOGFILE=${TMP_DIR}/restore.log
+      echot "LOGFILE not set, set to ${LOGFILE}"
+    fi
+
+    # Test directories
+
+    if [ ! -d ${PG_DATA_DIR} ]; then
+      echot "ERROR: Missing PostgreSQL data directory \"${PG_DATA_DIR}\", use SaltStack to provision!"
+      exit 1
+    fi
+
+    if [ ! -z "${PGBR_REPO_PATH-}" ]; then
+      if [ ! -d ${PGBR_REPO_PATH} ]; then
+        echot "ERROR: PGBR_REPO_PATH \"${PGBR_REPO_PATH}\" is not a directory!"
+        exit 1
+      fi
+    fi
+
+
+}
+
+function stopDatabase {
+    echot ">>> Shutting down database... "
+    local db_running=$(${PG_BIN_DIR}/pg_ctl status -D ${PG_DATA_DIR} || true)
+    if [[ $db_running == *"${PG_DATA_DIR}"* ]]; then
+      sudo /bin/systemctl stop ${PG_SERVICE}@${PG_INSTANCE}.service
+    fi
+}
+function startDatabase {
+    echot ">>> Starting database... "
+    sudo /bin/systemctl start ${PG_SERVICE}@${PG_INSTANCE}.service
+}
+function restartDatabase {
+    echot ">>> Restarting database... "
+    sudo /bin/systemctl restart ${PG_SERVICE}@${PG_INSTANCE}.service
+}
+function reloadDatabase {
+    echot ">>> Reloading database config"
+    psql -p ${PG_PORT} -c "select pg_reload_conf();"
+}
+
+function setPGPortFromConfig {
+
+  echot ">>> Getting port number from configuration"
+  PG_PORT=$(sed -rn "s/^port = '?([0-9]+)'?.*$/\1/p" ${PG_DATA_DIR}/postgresql.conf | tail -n 1)
+  if [ -z "${PG_PORT-}" ]; then
+    if [ -f "${PG_DATA_DIR}/postgresql.conf.saltstack" ]; then
+      # Value might be placed wherever
+      PG_PORT=$(sed -rn "s/^port = '?([0-9]+)'?.*$/\1/p" ${PG_DATA_DIR}/postgresql.conf.saltstack | tail -n 1)
+    else
+      # Use default port
+      PG_PORT=5432
+    fi
+  fi
+  if [ -z "${PG_PORT-}" ]; then
+    exit 1
+  fi
+
+}
+
+function saveConfigToTemp {
+
+  echot ">>> Creating config backup..."
+  cp ${PG_DATA_DIR}/pg_hba.conf ${PG_DATA_DIR}/postgresql.conf ${PG_DATA_DIR}/postgresql.auto.conf ${PG_DATA_DIR}/postgresql.conf.saltstack ${TMP_DIR}/
+
+}
+
+function restoreHBA {
+    echot ">>> Restoring pg_hba from backup..."
+    cp -f ${TMP_DIR}/pg_hba.conf ${PG_DATA_DIR}/
+
+}
+
+function restoreConfig {
+    echot ">>> Restoring configuration from backup..."
+    cp -f ${TMP_DIR}/postgresql.conf ${TMP_DIR}/postgresql.conf.saltstack ${PG_DATA_DIR}/
+
+}
+function restoreAutoConfig {
+    echot ">>> Restoring postgresql.auto.conf from backup..."
+    cp -f ${TMP_DIR}/postgresql.auto.conf ${PG_DATA_DIR}/
+}
+
+
+function updateConfig {
+    echot ">>> Update configuration parameter ${1}..."
+    if [[ $# -lt 2 ]]; then
+      exit 1
+    fi
+    local param=$1
+    local value=$2
+    local search=$(grep "^${param} = " ${PG_DATA_DIR}/postgresql.conf.saltstack 1>&2 && echo "found" || echo "missing")
+    if [ "found" == "${search}" ]; then
+      sed -i "s/^\(${param} =\) \(.*\)/\1\ '${value}'/" ${PG_DATA_DIR}/postgresql.conf.saltstack
+    else
+      echo "${param} = ${value}" >> ${PG_DATA_DIR}/postgresql.conf.saltstack
+    fi
+}
+
+function doPGBackrestRestore {
+  echot ">>> Restoring database from most recent backup... "
+
+  if [ -z "${PGBR_STANZA-}" ]; then
+    echot "ERROR: variable PGBR_STANZA not defined"
+    exit 1
+  fi
+  if [ -z "${PG_DATA_DIR-}" ]; then
+    echot "ERROR: variable PG_DATA_DIR not defined"
+    exit 1
+  fi
+  if [ -z "${LOGFILE-}" ]; then
+    echot "ERROR: variable LOGFILE not defined"
+    exit 1
+  fi
+  local optionalArgs=""
+  if [ ! -z "${PGBR_REPO_PATH-}" ]; then
+    optionalArgs="--repo1-path=${PGBR_REPO_PATH}"
+  fi
+
+  if [ ! -z "${PGBR_REPO-}" ]; then
+    optionalArgs="${optionalArgs} --repo=${PGBR_REPO}"
+  fi
+
+  if [ ! -z "${PGBR_TYPE-}" ]; then
+    if [ "${PGBR_TYPE}" == "immediate" ]; then
+      optionalArgs="${optionalArgs} --type=immediate --target-action=promote"
+    fi
+  fi
+
+  if [ ! -z "${PGBR_PARAMS-}" ]; then
+      optionalArgs="${optionalArgs} ${PGBR_PARAMS}"
+    fi
+
+  if [ -z "${PGBR_THREADS-}" ]; then
+    PGBR_THREADS=$(getconf _NPROCESSORS_ONLN) # Determine amount of cpu's
+    PGBR_THREADS=$((PGBR_THREADS/2))   # Use half of cpu's
+  fi
+
+  pgbackrest --pg1-path=${PG_DATA_DIR} --stanza=${PGBR_STANZA} ${optionalArgs} --log-level-console=info --process-max=${PGBR_THREADS} restore | tee -a ${LOGFILE}
+
+}
+
+function waitForArchiveReplay {
+  echot ">>> Waiting for archive replay completion"
+  until grep "database system is ready to accept connections" ${PG_DATA_DIR}/log/postgresql-$(LC_ALL=en_US.UTF-8 date +%a).log
+  do
+    echo -n "."
+    sleep 1
+  done
+  echo ""
+}
+
+function clearDataDir {
+    echot ">>> Removing \"${PG_DATA_DIR}\"... "
+    if [ -z "${PG_DATA_DIR-}" ]; then
+      echot "ERROR: variable PG_DATA_DIR not defined"
+      exit 1
+    fi
+
+    rm -rf "${PG_DATA_DIR}"/*
+}
+
+function clearLogs {
+  echot ">>> Cleaning up expired logs from backup..."
+  if [ -z "${PG_DATA_DIR-}" ]; then
+    echot "ERROR: variable PG_DATA_DIR not defined"
+    exit 1
+  fi
+
+  if [ ! -d "${PG_DATA_DIR}/log" ]; then
+    echot "ERROR: PG_DATA_DIR/log is not a directory"
+    exit 1
+  fi
+  rm -f "${PG_DATA_DIR}/log/"*
+}
+
+function getMaxConnections {
+
+  echot ">>> Get max connections"
+  CURIFS=$IFS     # Store current IFS
+  IFS=$'\n'       # Set IFS to new lines
+
+  ### Find all Active max_connections and the saltstack include.
+  ### Loop thru all the results and keep the last value
+  ## Example result:
+  ## max_connections = 100			# (change requires restart)
+  ## include_if_exists = postgresql.conf.saltstack
+  ## max_connections = 1536                          # Max connections to postgresql (requires restart)
+  for value in $(/usr/bin/grep -E '^max_connections|postgresql.conf.saltstack' ${PG_DATA_DIR}/postgresql.conf); do
+    # Parse value for max_connection
+    cfg_max_connections=$(echo "${value}" | sed -rn "s/^max_connections = '?([0-9]+)'?.*$/\1/p")
+
+    if [ ! -z "${cfg_max_connections-}" ]; then
+      MAX_CONNECTIONS=$cfg_max_connections # override previous value
+    else # if no max_connection is found, this must be the include line
+
+      # This file is managed by saltstack and should only have one or none max_connection entries.
+      salt_max_connections=$(sed -rn "s/^max_connections = '?([0-9]+)'?.*$/\1/p" ${PG_DATA_DIR}/postgresql.conf.saltstack)
+      if [ ! -z "${salt_max_connections-}" ]; then # if not empty we found a value, so assign it
+         MAX_CONNECTIONS=$salt_max_connections
+      fi
+
+    fi
+  done;
+
+  IFS=$CURIFS   # Reset IFS
+
+}
+
+
+
+
+function cleanup {
+  cp ${TMP_DIR}/restore.log ${PG_DATA_DIR}/log/
+  if [ ${RESTORE_SUCCESSFUL} == 1 ]; then
+    rm  -rf ${TMP_DIR}
+  fi
+}
+
+function slack {
+
+  PAYLOAD="{\"username\":\"${SLACK_USER}\",\"icon_emoji\":\":ghost:\", \"channel\":\"${SLACK_CHANNEL}\", \"blocks\":[{\"type\":\"section\",\"text\":{\"type\":\"mrkdwn\",\"text\":\"_replace_me_\"}}]}"
+  EMOJI=":ghost:"
+  if [ "${1}" == "OK" ]; then EMOJI=":thumbsup:"; fi
+  if [ "${1}" == "FAIL" ]; then EMOJI=":thumbsdown:"; fi
+
+  shift
+  MESSAGE="$@"
+  OUTPUT=$(echo $PAYLOAD | jq --arg msg "${MESSAGE}" --arg emoji "${EMOJI}" '.blocks[0].text.text = $msg |.icon_emoji = $emoji')
+  SEND=$(echo $OUTPUT | curl -sS -X POST -H "Content-Type: application/json" --data @- $SLACK_URL)
+}
+
+function start_trap {
+  # echo an error message before exiting
+  trap 'slack "FAIL" "\`\`\`${LAST_ECHO}\`\`\` Failed with exit code \`$?\`."; {% if add_cleanup %}cleanup{% endif %}' EXIT
+}
+
+function end_trap {
+  trap - EXIT
+}
+
+SLACK_USER=$(hostname -s)
+LAST_ECHO=""
+
+start_trap
+
+if [ "${BASH_SOURCE[0]}" == "${0}" ]; then
+
+  . /var/lib/pgsql/scripts/.secrets
+  slack "OK" "Test message from base_functions"
+  end_trap
+
+fi

@@ -1,0 +1,35 @@
+# vim: ts=2 sw=2 sts=2 expandtab ft=yaml
+
+postgresql:
+  instance:
+    mydb_prod:                # CHANGE
+      initdb_params:
+        encoding: UTF8
+      databases:
+        - name: &db1 mydb     # CHANGE
+      roles:
+        - name: &replication_user repl
+          login: True
+          encrypted: scram-sha-256
+          replication: True
+          password: s3cr3t    # CHANGE
+        - name: &monitoring_user monitor
+          login: True
+          encrypted: scram-sha-256
+          replication: True
+          password: s3cr3t    # CHANGE
+      pg_hba:
+        - type: host
+          database: replication
+          user: *replication_user
+          address: 10.255.0.0/16    # CHANGE
+          method: md5
+        - type: host
+          database: *db1
+          user: *monitoring_user
+          address: 10.255.0.0/16    # CHANGE
+          method: md5
+      extensions:
+        - name: pg_stat_statements
+          maintenance_db: *db1
+

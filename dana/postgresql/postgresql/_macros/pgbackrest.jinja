@@ -1,0 +1,120 @@
+{% macro gen_cron_config(instance, config={}) %}
+
+{#
+# Set defaults for all available options.
+#}
+{% set profile = config.profile | default(None) %}
+{% set repo = config.repo | default(1) %}
+{% set hour = config.hour | default(0) %}
+{% set minute = config.minute | default(0) %}
+{% set full_day = config.full_day | default(0) %}
+
+{#
+# Based on given options and available information, set implicit
+# configurations
+#}
+
+{# Set full backup day/(incr|diff) days base on "full_day" config #}
+{% set _week = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] %}
+{% if full_day is number %}
+  {% do _week.pop(full_day) %}
+{% elif full_day in _week %}
+  {% for _dummy in _week %}
+    {% do _week.pop(loop.index - 1 ) %}
+  {% endfor %}
+{% else %}
+  {{ raise('Illegal full_day specified in postgresql:instance:<name>:pgbackrest:cron') }}
+{% endif %}
+
+{% if not profile %}
+pgbackrest full backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest full {{ instance }}
+    - user: postgres
+
+pgbackrest incr backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest incr {{ instance }}
+    - user: postgres
+
+pgbackrest diff backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest diff {{ instance }}
+    - user: postgres
+{% endif %}
+
+
+{% if profile == "daily_full" %}
+pgbackrest full backup cronjob / {{ instance }}:
+  cron.present:
+    - name: /usr/bin/pgbackrest --stanza={{instance}} backup --type=full --repo={{repo}}
+    - user: postgres
+    - identifier: pgbackrest full {{ instance }}
+    - hour: {{ hour }}
+    - minute: {{ minute }}
+
+pgbackrest incr backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest incr {{ instance }}
+    - user: postgres
+
+pgbackrest diff backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest diff {{ instance }}
+    - user: postgres
+{% endif %}
+
+
+
+{% if profile == "weekly_full_daily_incr" %}
+pgbackrest full backup cronjob / {{ instance }}:
+  cron.present:
+    - name: /usr/bin/pgbackrest --stanza={{instance}} backup --type=full --repo={{repo}}
+    - user: postgres
+    - identifier: pgbackrest full {{ instance }}
+    - hour: {{ hour }}
+    - minute: {{ minute }}
+    - dayweek: {{ full_day }}
+
+pgbackrest incr backup cronjob / {{ instance }}:
+  cron.present:
+    - name: /usr/bin/pgbackrest --stanza={{instance}} backup --type=incr --repo={{repo}}
+    - identifier: pgbackrest incr {{ instance }}
+    - user: postgres
+    - hour: {{ hour }}
+    - minute: {{ minute }}
+    - dayweek: {{ _week | join(',') }} {#' vim fix highlighting #}
+
+pgbackrest diff backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest diff {{ instance }}
+    - user: postgres
+{% endif %}
+
+
+
+{% if profile == "weekly_full_daily_diff" %}
+pgbackrest full backup cronjob / {{ instance }}:
+  cron.present:
+    - name: /usr/bin/pgbackrest --stanza={{instance}} backup --type=full --repo={{repo}}
+    - user: postgres
+    - identifier: pgbackrest full {{ instance }}
+    - hour: {{ hour }}
+    - minute: {{ minute }}
+    - dayweek: {{ full_day }}
+
+pgbackrest incr backup cronjob / {{ instance }}:
+  cron.absent:
+    - identifier: pgbackrest incr {{ instance }}
+    - user: postgres
+
+pgbackrest diff backup cronjob / {{ instance }}:
+  cron.present:
+    - name: /usr/bin/pgbackrest --stanza={{instance}} backup --type=diff --repo={{repo}}
+    - identifier: pgbackrest diff {{ instance }}
+    - user: postgres
+    - hour: {{ hour }}
+    - minute: {{ minute }}
+    - dayweek: {{ _week | join(',') }} {#' vim fix highlighting #}
+{% endif %}
+{% endmacro %}

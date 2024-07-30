@@ -1,0 +1,14 @@
+config {
+    daysToKeep = 21
+    concurrentBuilds = false
+}
+
+node {
+    git.checkout{}
+
+    catchError {
+      kitchenci.test()
+    }
+
+    notify { slackChannel = "#jenkins-job-results" }
+}

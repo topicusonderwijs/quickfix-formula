@@ -1,0 +1,27 @@
+{% from "postgresql/map.jinja" import postgresql with context %}
+
+{% set pg_root_dir = postgresql.root_dir %}
+
+{%- if postgresql['instance'].items() | length > 0 %}
+logs:
+  file:
+{%- for name, instance in postgresql['instance'].items() %}
+    {%- set version = instance.version %}
+    {% if instance.pgdata_override is defined %}
+      {% set pg_data_dir = instance.pgdata_override %}
+    {% else %}
+      {% set pg_data_dir = pg_root_dir + '/' ~ version ~ '/' ~ name %}
+    {% endif %}
+    {{ "postgresql_" + name + "_logs" }}:
+      paths:
+        - {{ pg_data_dir + "/log/postgresql-20*.log" }}
+      labels:
+        service_name: "postgresql"
+        instance_name: {{ name }}
+        {%- if 'labels' in instance %}
+        {%- for l, v in instance.labels.items() %}
+        {{ l }}: {{ v }}
+        {%- endfor %}
+        {% endif %}
+{%- endfor %}
+{%- endif %}

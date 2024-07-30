@@ -1,0 +1,64 @@
+postgresql:
+  scripts:
+    files:
+      restore_template.sh: |
+        #!/bin/bash
+        ### This file is managed by Saltstack
+        ### Changes WILL be overwritten
+
+        # Set bash options.
+        # e: exit on error
+        # u: exit on unbound variable
+        # o pipefail: set exit code from pipe line to rightmost not zero exit code,
+        #             needed for "-e" to work in code pipelines.
+        set -euxo pipefail
+
+
+        # Load tools and starts EXIT trap for slack and cleanup.
+        . /var/lib/pgsql/scripts/base_functions.sh
+
+        . /var/lib/pgsql/scripts/.secrets
+
+        PG_INSTANCE="pg_dest"
+        PG_VERSION="13"
+        PGBR_STANZA="pg_source"
+        #PGBR_REPO_PATH="/var/lib/pgbackrest/" # Path to pgbackrest data mount, uncomment to override /etc/pgbackrest.conf
+
+        echot ">>> Starting at $(date)"
+        slack "START" "Starting with restore of instance ${PG_INSTANCE}"
+
+        prepareAndSanityCheck
+
+        stopDatabase
+        setPGPortFromConfig
+        echo $PG_PORT
+        saveConfigToTemp
+        clearDataDir
+        doPGBackrestRestore
+        getMaxConnections
+        restoreConfig
+        updateConfig "max_connections" ${MAX_CONNECTIONS}
+        clearLogs
+        startDatabase
+        waitForArchiveReplay
+
+        ## Start custom restore queries like:
+        # echot ">>> Renaming database from \"${DB_SOURCE}\" to \"${DB_TARGET}\""
+        # psql -p ${PG_PORT} -c "alter database ${DB_SOURCE} rename to ${DB_TARGET};"
+        #
+        # echot ">>> Restoring password for postgres_exporter"
+        # psql -p ${PG_PORT} -c "alter user postgres_exporter with password '${SECRET_PW_EXPORTER}';"
+
+        restoreConfig
+        #restoreAutoConfig # Uncomment if you want to restore postgresql.auto.conf
+        restoreHBA
+        restartDatabase
+
+        RESTORE_SUCCESSFUL=1
+        echot ">>> Finished at: $(date)"
+        slack "OK" "Finished with restoring instance: ${PG_INSTANCE}"
+
+        # End error trap
+        end_trap
+
+        exit 0

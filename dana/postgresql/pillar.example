@@ -1,0 +1,342 @@
+# vim: filetype=yaml ts=2 sw=2 expandtab
+postgresql:
+  ## default
+  #repositories:
+  #  - name: pgdg-common
+  #    humanname: PostgreSQL common RPMs for RHEL/CentOS $releasever - $basearch
+  #    baseurl: https://download.postgresql.org/pub/repos/yum/common/redhat/rhel-$releasever-$basearch
+  #    enabled: 1
+  #    gpgcheck: 1
+  #  - name: pgdg10
+  #    humanname: PostgreSQL 10 for RHEL/CentOS $releasever - $basearch
+  #    baseurl: https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-$releasever-$basearch
+  #    enabled: 1
+  #    gpgcheck: 1
+  #  - name: pgdg11
+  #    humanname: PostgreSQL 11 for RHEL/CentOS $releasever - $basearch
+  #    baseurl: https://download.postgresql.org/pub/repos/yum/11/redhat/rhel-$releasever-$basearch
+  #    enabled: 1
+  #    gpgcheck: 1
+  #  - name: pgdg12
+  #    humanname: PostgreSQL 12 for RHEL/CentOS $releasever - $basearch
+  #    baseurl: https://download.postgresql.org/pub/repos/yum/12/redhat/rhel-$releasever-$basearch
+  #    enabled: 1
+  #    gpgcheck: 1
+
+  scripts:
+      # Secrets are stored in a secrets file in the syntax KEY="string" or KEY=123
+      # KEY is the result of a recursive iterate of the pillar tree, combining each layer with a underscore (_)
+      # The 2 options listed below will give the same result:
+      #
+      # SLACK_CHANNEL="channelname"
+      # SLACK_URL="https://hooks.slack.com/services/XXXX/YYYY/ZZZZ"
+      #
+
+      secrets:
+        slack_url: https://hooks.slack.com/services/XXXX/YYYY/ZZZZ
+        slack_channel: channelname
+        slack:
+          url: https://hooks.slack.com/services/XXXX/YYYY/ZZZZ
+          channel: channelname
+
+      add_cleanup: False | True  # Add cleanup function in the EXIT trap is base_functions.sh
+
+      # Files can be used in 2 way:
+      # If the file content starts with `salt://` that path will be copied as-is to the filename.
+      #
+      # Otherwise the pillar content is placed as-is under the filename.
+      files:
+        filename1: salt://path/to/a/file
+        filename2: content
+
+  instance:
+    artifactory_test:
+      version: 13
+
+      # Should the database be running? (Defaults to True). When set
+      # to False the database will not be start up or it will be 
+      # shutdown when it is running. This might be desired when 
+      # upgrading a database. The workflow might look like this:
+      # 1. Increment "instance.<name>.version" to the new version.
+      # 2. Set "instance.<name>.running" to "False".
+      # 3. Apply state.
+      # 4. Upgrade the database using pg_upgrade.
+      # 5. Set "instance.<name>.running" to "True". 
+      # 6. Apply state.
+      running: False # Default: True
+
+      # All long options are supported (options starting with '--')
+      # See: https://www.postgresql.org/docs/current/app-initdb.html
+      initdb_params:
+        encoding: UTF8
+
+      override_pg_hba: False    # Clear the default upstream (and unsafe) 
+                                # pg_hba configuration. Only the record
+                                # type: local
+                                # database: all
+                                # user: postgres
+                                # method: peer
+                                # Will be kept, this is nessecary for this formula to
+                                # function.
+      pg_hba:
+        - type: local
+          database: artifactory_test
+          user: artifactory_test
+          method: trust
+        - type: host
+          database: artifactory_test
+          user: artifactory
+          address: 127.0.0.1/32
+          method: password
+      
+      # All settings that can be set in `postgresql.conf` are allowed
+      # See: https://www.postgresql.org/docs/current/runtime-config.html 
+      settings:
+        listen_addresses: '*'
+        port: 5434
+        shared_preload_libraries: pg_stat_statements
+         
+        # Include these archive commands if you want to use pgbackrest wal
+        # archiving. 
+        #
+        # NOTE: database must restart after setting this config.
+        # a reload is not good enough.
+        # NOTE: The stanza name is the same as the instance name when using
+        # this formula to configure pgbackrest. (eg. postgresql.pgbackrest).
+        archive_mode: 'on'
+        archive_command: '/bin/pgbackrest --stanza=artifactory_test archive-push %p'
+
+      # See https://docs.saltstack.com/en/latest/ref/states/all/salt.states.postgres_user.html
+      # for possible settings.
+      # ps: "role" is the correct nomenclature
+      # Note: has no effect when "is_standby: True".
+      roles:
+        - name: artifactory_test
+          login: True
+          password: s3cr3t
+        - name: goestin
+
+      # See https://docs.saltstack.com/en/latest/ref/states/all/salt.states.postgres_database.html
+      # for possible settings
+      # Note: has no effect when "is_standby: True".
+      databases:
+        - name: artifactory_test
+          owner: artifactory_test
+        - name: test123
+      
+      # See https://docs.saltstack.com/en/latest/ref/states/all/salt.states.postgres_extension.html
+      # for possible settings
+      # Note: has no effect when "is_standby: True".
+      extensions:
+        - name: pg_stat_statements
+          maintenance_db: test123
+      
+
+      # Optional pgbackrest configuration for this specific instance.
+      # (For more pgbackrest configuration see the pillar key: "postgresql:pgbackrest" below.)
+      pgbackrest:
+        enabled: True         # Default. Set to False to not include this 
+                              # instance in the pgbackrest configuration.
+        stanza: Name          # Set/Override stanza name, if not set the instance name is used.
+        create_stanza: False  # Default. Set to True to run stanza-create during the salt run
+
+        # Optional cron settings to indicate when, how and where pgbackrest 
+        # has to backup this instance.
+        cron:
+          profile: None # Default. Can be one of None, daily_full, 
+                        #          weekly_full_daily_incr, 
+                        #          weekly_full_daily_diff.
+                        #          See postgresql/_macros/pgbackrest.jinja for 
+                        #          definitions.
+          full_day: sun # Default. On which day to run the full backup when 
+                        #          selecting a profile "weekly_full_daily_*".
+          hour: 0       # Default. On which hour to start the backup?
+          minute: 0     # Default. On which minute to start the backup
+          repo: 1       # Default. Which pgbackrest repo to target.
+                        #          The repo's index is
+                        #          expected here. Eg. "1" for "repo1"
+
+    artifactory_accp:
+      version: 12
+      # NOTE: For normal use cases pgdata_override is strongly discouraged. It
+      #       is implemented for special cases where the default location is
+      #       problematic. For example for somtoday's standby server there are
+      #       two mounts for each hotstandby instance. In the normal scenario
+      #       this can not be done because if you mount a FS on 
+      #       "/var/lib/pgsql/16/<database>", this directory is not empty 
+      #       (because of "lost+found") and the state will fail.
+      #
+      #       This setting allows us to mount the fs on /mnt and then create
+      #       the database in "/mnt/artifactory_accp_tmp". After the state is 
+      #       applied we can stop the database and then: 
+      #       "mv /mnt/artifactory_accp_tmp/* /mnt/artifactory_accp". Then
+      #       we can remove this setting and mount the fs on the default place.
+      #       (/var/lib/pgsql/16/artifactory_accp).
+      pgdata_override: /mnt/artifactory_accp_tmp
+      initdb_params:
+        encoding: UTF8
+      pg_hba:
+        - type: local
+          database: artifactory_accp
+          user: artifactory
+          method: trust
+        - type: host
+          database: artifactory_accp
+          user: artifactory_accp
+          address: 127.0.0.1/32
+          method: password
+      settings:
+        listen_addresses: '*'
+        port: 5433
+        shared_preload_libraries: pg_stat_statements
+      roles:
+        - name: artifactory_accp
+          login: True
+          password: s3cr3t
+        - name: goestin
+      databases:
+        - name: artifactory_accp
+          user: artifactory_accp
+        - name: test123
+      extensions:
+        - name: pg_stat_statements
+          maintenance_db: test123
+
+    artifactory_prod:
+      version: 12
+      initdb_params:
+        encoding: UTF8
+      pg_hba:
+        - type: local
+          database: artifactory_prod
+          user: artifactory
+          method: trust
+        - type: host
+          database: artifactory_prod
+          user: artifactory_prod
+          address: 127.0.0.1/32
+          method: password
+      settings:
+        listen_addresses: '*'
+        port: 5432
+        shared_preload_libraries: pg_stat_statements
+      roles:
+        - name: artifactory_prod
+          login: True
+          password: s3cr3t
+        - name: goestin
+      databases:
+        - name: artifactory_prod
+          user: artifactory_prod
+        - name: test123
+      extensions:
+        - name: pg_stat_statements
+          maintenance_db: test123
+
+    artifactory_mirror:
+      version: 14
+      # Configure this instance as a hot-standby:
+      # When this option is set, instead of creating a empty database using `initdb`
+      # the database will be copied using pgbasebackup from the primary. This
+      # step is skipped if there already exists a directory.
+      #
+      # The pillar keys .databases .roles and .extensions have no impact when
+      # `is_standby: True`
+      is_standby: True # Default is False
+
+      # if `is_standby` is True, the following __must__ be configured
+      standby_config:
+        remote_host: 1.2.3.4
+        remote_port: 5433 # Default 5432
+        remote_user: replication 
+        remote_password: s3cr3t
+
+  # The postgresql.pgbackrest state will configure pgbackrest for each instance
+  # unless the pillar key "postgresql:instance:<name>:pgbackrest:disabled" is 
+  # set to True.
+  #
+  # Each instance will have a "stanza" named the same as the instance name.
+  #
+  # When no configuration whatsoever is made, the following will be configured:
+  # - A pgbackrest repo at "/var/lib/pgbackrest"
+  # - This repo will have a "retention-full" setting of 1.
+  # - A stanza which name is the same as the instance name.
+  # - This stanza will have it's pg1-path configured.
+  # - If This stanza has a "port" defined in it's postgres configuration,
+  #   its pg1-port will also be defined.
+  pgbackrest:
+    
+    # [EXPERIMENTAL] Use pgbackrest async operation. For some workloads WAL is
+    # created faster then pgbackrest can archive it to it's (cloud) storage.
+    # To remedy this situation async operation can be used to achieve better
+    # performance. However, async operation comes with a drawback that 
+    # pgbackrest will report OK to postgres that a WAL segment was archived even
+    # though it might have dropped the entire queue if it was full.
+    async:
+      enabled: false                    # Default
+      archive-push-proc-max: 8          # Default
+      archive-get-proc-max: 8           # Default
+      spool-path: /var/spool/pgbackrest # Default
+      archive-push-queue-max:            # Default = not set 
+      archive-get-queue-max: 1GiB        # Default
+      archive-missing-retry: True       # Default
+    
+    # all "key: values" entered below "global" will be formatted accordingly in 
+    # the resulting configuration file.
+    #
+    # Note, by default async operation is configured. This is required for
+    # for proper operation while using S3 cloud or other slower storage.
+    global:
+      # The following are defaults when there is no configuration found for the
+      # respective key:
+      log-level-console: info # Default
+      process-max: 32         # Default: num (cpu's / 2)
+      compress-type: gz       # Default
+      compress-level: 6       # Default
+    # PGBackrest repository config.
+    # See: https://pgbackrest.org/configuration.html#section-repository
+    #
+    # Repository configurations in the pgbackrest configuration file are 
+    # indexed. A very simple pgbackrest.conf with 2 repositories configured 
+    # would look like:
+    # ```
+    # repo1-path=/some/repo1/path
+    # repo2-path=/some/repo2/path
+    # ```
+    # This formula follows this configuration style by allowing configuration of
+    # pgbackrest repositories in a list. The order in this list matters. 
+    # Index 0 is repo1, index 1 is repo2, etc,etc.
+    #
+    repositories:
+      # When no repositories are configured, this repository will be the 
+      # default.
+      #
+      # NOTE: when configuring a posix repository (this is a posix repo),
+      # make sure that the directory exists and is writable by the 
+      # postgres user.
+      - path: /var/lib/pgbackrest   # Default
+
+      # Backblaze S3 example with clientside encryption. 
+      # NOTE: when the type is set to "s3" the repository opion: 'bundle' is set
+      #       to 'y'.
+      # see: https://pgbackrest.org/configuration.html#section-repository/option-repo-bundle
+      ### - type: s3
+      ###   s3-bucket: dd32dfe4-c924-4356-b05a-d6902879aa99
+      ###   s3-region: us-east-005
+      ###   s3-endpoint: s3.us-east-005.backblazeb2.com
+      ###   s3-key: <the client key>
+      ###   s3-key-secret: <the client secret>
+      ###   cipher-type: aes-256-cbc
+      ###   cipher-pass: <the encryption key>
+
+      ### - type: gcs
+      ###   gcs-bucket: dd32dfe4-c924-4356-b05a-d6902879aa99
+      ###   gcs-endpoint: storage.googleapis.com
+      ###   gcs-key: key content (Will be stored as "/etc/pgbackrest/gcs-key-repo-{{index}}.json"
+      ###   gcs-key-type: auto
+
+
+
+
+
+

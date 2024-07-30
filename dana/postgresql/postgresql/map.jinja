@@ -1,0 +1,45 @@
+# -*- coding: utf-8 -*-
+# vim: ft=jinja
+
+# howto:
+# - default waarden gaan in defaults.yaml
+# - OS specifiek gaan hieronder in de OS family map
+# - omgeving specifiek (aka user config) gaat in pillar
+
+# 1. Lees de default waarden uit defaults.yaml. Zet dit in de namespace: default_settings
+{% import_yaml 'postgresql/defaults.yaml' as default_settings %}
+
+# 2. Zet waarden in de namespace "os_family_map" op basis van OS.
+{% set os_family_map = salt['grains.filter_by']({
+        'Debian': {},
+        'Suse': {},
+        'Arch': {},
+        'RedHat': {},
+  }
+  , grain="os_family"
+  , merge=salt['pillar.get']('postgresql:lookup'))
+%}
+
+#3. Update de namespace "default_settings" met de namespace "os_family_map"
+{% do default_settings.postgresql.update(os_family_map) %}
+
+#4. update de namespace default_settings.postgresql met de data
+#   uit pillar dat uit de pillar namespace "postgresql komt"
+{% set postgresql = salt['pillar.get'](
+        'postgresql',
+        default=default_settings.postgresql,
+        merge=True
+    )
+%}
+
+#{## Theforeman.org has the last call ##}
+#{% set foreman_data = salt['pillar.get']('postgresql_foreman_parameter','None') %}
+#{% if not foreman_data == 'None' %}
+#### For a list ###
+#{% set foreman_data_list = foreman_data.split(',') %}
+#{% set pillar_data_list = salt['pillar.get']('postgresql:somelist',[]) %}
+#{% do postgresql.update({'somelist': foreman_data_list + pillar_data_list }) %}
+#### For a single value
+#{% do postgresql.update({'somekey': foreman_data }) %}
+#{% endif %}
+
