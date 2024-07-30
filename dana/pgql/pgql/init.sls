@@ -5,13 +5,13 @@ include:
 {%- if salt['state.sls_exists']('lvm') %}
   - lvm
 {%- endif %}
-  - postgresql.repo
-  - postgresql.install
-  - postgresql.config
-  - postgresql.environment
-  - postgresql.scripts
-  - postgresql.service
-  - postgresql.roles
-  - postgresql.databases
-  - postgresql.extensions
+  - pgql.repo
+  - pgql.install
+  - pgql.config
+  - pgql.environment
+  - pgql.scripts
+  - pgql.service
+  - pgql.roles
+  - pgql.databases
+  - pgql.extensions
 
