@@ -5,13 +5,13 @@ include:
 {%- if salt['state.sls_exists']('lvm') %}
   - lvm
 {%- endif %}
-  - pgql.repo
-  - pgql.install
-  - pgql.config
-  - pgql.environment
-  - pgql.scripts
-  - pgql.service
-  - pgql.roles
-  - pgql.databases
-  - pgql.extensions
+  - dana.pgsql.pgql.repo
+  - dana.pgsql.pgql.install
+  - dana.pgsql.config
+  - dana.pgql.environment
+  - dana.pgql.scripts
+  - dana.pgql.service
+  - dana.pgql.roles
+  - dana.pgql.databases
+  - dana.pgql.extensions
 
