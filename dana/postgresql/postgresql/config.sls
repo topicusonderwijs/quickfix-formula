@@ -167,6 +167,15 @@ pgpass file:
     - require:
       - cmd: {{ instance_name }}_postgresql-initdb
 
+{{ instance_name }}_postgresql-extra-config:
+  file.append:
+    - name: {{ pg_data_dir }}/postgresql.conf.extra
+    - text: |
+        # global settings 
+        {{ postgresql.settings.items() }}
+    - require:
+      - file: {{ instance_name }}_postgresql-main-config
+
 {{ instance_name }}_postgresql-config:
   file.managed:
     - name: {{ pg_data_dir }}/postgresql.conf.saltstack
