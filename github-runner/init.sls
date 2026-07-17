@@ -1,4 +1,4 @@
 
 
 include:
-  github-runner.install
+  - github-runner.install
