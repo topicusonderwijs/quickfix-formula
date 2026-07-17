@@ -1,9 +1,8 @@
 
 {% from "github-runner/map.jinja" import githubrunner with context -%}
 
-{% set version="2.313.0" %}
-{% set hash="56910d6628b41f99d9a1c5fe9df54981ad5d8c9e42fc14899dcc177e222e71c4" %}
-
+{% set version = githubrunner['actions-runner'].version %}
+{% set hash = githubrunner['actions-runner'].hash %}
 
 
 github-runner:
@@ -17,7 +16,7 @@ github-runner:
 /opt/github-runner/actions-runner:
   archive.extracted:
     - source: https://github.com/actions/runner/releases/download/v{{ version }}/actions-runner-linux-x64-{{ version }}.tar.gz
-    - source_hash: {{ hash }}
+    - source_hash: sha256={{ hash }}
     - user: github-runner
     - group: github-runner
     - unless: cat /opt/github-runner/actions-runner/svc.sh
